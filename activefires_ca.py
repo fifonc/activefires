@@ -1,7 +1,6 @@
 import streamlit as st
 import pydeck as pdk
 import pandas as pd
-import os
 from snowflake.snowpark import Session
 
 # =========================
@@ -12,90 +11,73 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🔥 Canada Active Fires Dashboard")
+# =========================
+# DARK MODE TOGGLE
+# =========================
+st.sidebar.header("🎨 Appearance")
 
-# =========================
-# PATH SETUP
-# =========================
-BASE_DIR = os.path.dirname(__file__)
-CSV_PATH = os.path.join(BASE_DIR, "data", "active_fires.csv")
+dark_mode = st.sidebar.toggle("Dark Mode", value=False)
+
+if dark_mode:
+    st.markdown("""
+        <style>
+        .stApp {
+            background-color: #0e1117;
+            color: white;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+st.title("🔥 Canada Active Fires Dashboard")
 
 # =========================
 # SNOWFLAKE CONNECTION
 # =========================
 def get_snowflake_session():
-    try:
-        return Session.builder.configs(
-            st.secrets["snowflake"]   # <-- matches TOML [snowflake]
-        ).create()
-    except Exception as e:
-        raise Exception(f"Snowflake connection failed: {e}")
+    return Session.builder.configs(
+        st.secrets["snowflake"]
+    ).create()
 
 # =========================
-# DATA LOADING
+# LOAD DATA (SNOWFLAKE ONLY)
 # =========================
 @st.cache_data
-def load_data(source):
-    # Try Snowflake
-    if source == "Snowflake":
-        try:
-            session = get_snowflake_session()
-            df = session.sql("SELECT * FROM EVA.GIS.VW_ACTIVEFIRES").to_pandas()
-            return df
-        except Exception as e:
-            st.warning("⚠️ Snowflake failed. Falling back to CSV...")
+def load_data():
+    session = get_snowflake_session()
+    return session.sql("SELECT * FROM EVA.GIS.VW_ACTIVEFIRES").to_pandas()
 
-    # CSV fallback
-    if os.path.exists(CSV_PATH):
-        return pd.read_csv(CSV_PATH)
-    else:
-        st.error("❌ No data source available. Add CSV or fix Snowflake connection.")
-        return pd.DataFrame()
+df = load_data()
 
 # =========================
-# SIDEBAR CONTROLS
-# =========================
-st.sidebar.header("⚙️ Controls")
-
-data_source = st.sidebar.radio(
-    "Data Source",
-    ["Snowflake", "Local CSV"]
-)
-
-df = load_data(data_source)
-
-# Stop if no data
-if df.empty:
-    st.stop()
-
-# =========================
-# FILTERS
+# SIDEBAR FILTERS (DROPDOWNS)
 # =========================
 st.sidebar.header("🔎 Filters")
 
-provinces = sorted(df["PROVINCE"].dropna().unique())
-selected_provinces = st.sidebar.multiselect(
-    "Province", provinces, default=provinces
-)
+# Province dropdown
+provinces = ["All"] + sorted(df["PROVINCE"].dropna().unique())
+selected_province = st.sidebar.selectbox("Province", provinces)
 
-response_types = sorted(df["RESPONSE_TYPE_DESCRIPTION"].dropna().unique())
-selected_response = st.sidebar.multiselect(
-    "Response Type", response_types, default=response_types
-)
+# Response dropdown
+responses = ["All"] + sorted(df["RESPONSE_TYPE_DESCRIPTION"].dropna().unique())
+selected_response = st.sidebar.selectbox("Response Type", responses)
 
-stages = sorted(df["STAGE_OF_CONTROL_DESCRIPTION"].dropna().unique())
-selected_stages = st.sidebar.multiselect(
-    "Stage of Control", stages, default=stages
-)
+# Stage dropdown
+stages = ["All"] + sorted(df["STAGE_OF_CONTROL_DESCRIPTION"].dropna().unique())
+selected_stage = st.sidebar.selectbox("Stage of Control", stages)
 
 # =========================
-# FILTER DATA
+# APPLY FILTERS
 # =========================
-filtered = df[
-    (df["PROVINCE"].isin(selected_provinces))
-    & (df["RESPONSE_TYPE_DESCRIPTION"].isin(selected_response))
-    & (df["STAGE_OF_CONTROL_DESCRIPTION"].isin(selected_stages))
-].copy()
+filtered = df.copy()
+
+if selected_province != "All":
+    filtered = filtered[filtered["PROVINCE"] == selected_province]
+
+if selected_response != "All":
+    filtered = filtered[filtered["RESPONSE_TYPE_DESCRIPTION"] == selected_response]
+
+if selected_stage != "All":
+    filtered = filtered[filtered["STAGE_OF_CONTROL_DESCRIPTION"] == selected_stage]
 
 # =========================
 # KPIs
@@ -125,6 +107,7 @@ COLOR_MAP = {
 }
 DEFAULT_COLOR = [156, 163, 175, 200]
 
+filtered = filtered.copy()
 filtered["color"] = filtered["STAGE_OF_CONTROL_DESCRIPTION"].map(
     lambda x: COLOR_MAP.get(x, DEFAULT_COLOR)
 )
@@ -195,7 +178,7 @@ st.pydeck_chart(pdk.Deck(
     layers=[boundary_layer, fire_layer],
     initial_view_state=view_state,
     tooltip=tooltip,
-    map_style="light",
+    map_style="dark" if dark_mode else "light",
 ))
 
 # =========================
