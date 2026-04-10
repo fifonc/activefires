@@ -1,6 +1,7 @@
 import streamlit as st
 import pydeck as pdk
 import pandas as pd
+import os
 from snowflake.snowpark import Session
 
 # =========================
@@ -14,32 +15,42 @@ st.set_page_config(
 st.title("🔥 Canada Active Fires Dashboard")
 
 # =========================
+# PATH SETUP
+# =========================
+BASE_DIR = os.path.dirname(__file__)
+CSV_PATH = os.path.join(BASE_DIR, "data", "active_fires.csv")
+
+# =========================
 # SNOWFLAKE CONNECTION
 # =========================
 def get_snowflake_session():
     try:
         return Session.builder.configs(
-            st.secrets["snowflake"]
+            st.secrets["snowflake"]   # <-- matches TOML [snowflake]
         ).create()
     except Exception as e:
-        raise Exception("Snowflake connection failed. Check secrets.toml")
+        raise Exception(f"Snowflake connection failed: {e}")
 
 # =========================
-# DATA LOADING (DUAL MODE)
+# DATA LOADING
 # =========================
 @st.cache_data
 def load_data(source):
+    # Try Snowflake
     if source == "Snowflake":
         try:
             session = get_snowflake_session()
             df = session.sql("SELECT * FROM EVA.GIS.VW_ACTIVEFIRES").to_pandas()
+            return df
         except Exception as e:
-            st.warning("⚠️ Snowflake failed. Using local CSV instead.")
-            df = pd.read_csv("data/active_fires.csv")
-    else:
-        df = pd.read_csv("data/active_fires.csv")
+            st.warning("⚠️ Snowflake failed. Falling back to CSV...")
 
-    return df
+    # CSV fallback
+    if os.path.exists(CSV_PATH):
+        return pd.read_csv(CSV_PATH)
+    else:
+        st.error("❌ No data source available. Add CSV or fix Snowflake connection.")
+        return pd.DataFrame()
 
 # =========================
 # SIDEBAR CONTROLS
@@ -53,8 +64,12 @@ data_source = st.sidebar.radio(
 
 df = load_data(data_source)
 
+# Stop if no data
+if df.empty:
+    st.stop()
+
 # =========================
-# SIDEBAR FILTERS
+# FILTERS
 # =========================
 st.sidebar.header("🔎 Filters")
 
@@ -83,7 +98,7 @@ filtered = df[
 ].copy()
 
 # =========================
-# KPI SECTION
+# KPIs
 # =========================
 total_fires = len(filtered)
 total_hectares = int(filtered["HECTARES"].sum()) if total_fires > 0 else 0
@@ -172,7 +187,7 @@ tooltip = {
 }
 
 # =========================
-# MAP DISPLAY
+# MAP
 # =========================
 st.subheader("🗺️ Fire Map")
 
