@@ -2,3 +2,4 @@ streamlit
 pandas
 pydeck
 snowflake-snowpark-python
+snowflake-connector-python
