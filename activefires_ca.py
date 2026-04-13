@@ -28,7 +28,7 @@ if dark_mode:
         </style>
     """, unsafe_allow_html=True)
 
-st.title("🔥 Canada Active Fires Dashboard")
+st.header("🔥 Canada Active Fires Dashboard")
 
 # =========================
 # SNOWFLAKE CONNECTION
@@ -106,6 +106,7 @@ COLOR_MAP = {
     "Unstaffed and Contained": [251, 191, 36, 200],
 }
 DEFAULT_COLOR = [156, 163, 175, 200]
+# DEFAULT_COLOR = [211, 218, 231, 200]
 
 filtered = filtered.copy()
 filtered["color"] = filtered["STAGE_OF_CONTROL_DESCRIPTION"].map(
@@ -193,7 +194,10 @@ st.dataframe(
         "HECTARES",
         "RESPONSE_TYPE_DESCRIPTION",
         "STAGE_OF_CONTROL_DESCRIPTION",
-        "STARTDATE"
+        "STARTDATE",
+        "HECTARES",
+        "DAYS_ACTIVE"
+
     ]],
     use_container_width=True,
 )
