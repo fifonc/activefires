@@ -29,32 +29,59 @@ if dark_mode:
     card = "#1F2937"
     sidebar = "#111827"
     text = "white"
+    filter_text = "white"
 else:
     bg = "#F9FAFB"
     card = "#FFFFFF"
     sidebar = "#F3F4F6"
     text = "#111827"
+    filter_text = "black"
 
 # =========================
 # GLOBAL CSS
 # =========================
 st.markdown(f"""
 <style>
-.stApp {{ background-color: {bg}; color: {text}; }}
 
-h1 {{ margin-bottom: 10px; }}
+/* App */
+.stApp {{
+    background-color: {bg};
+    color: {text};
+}}
 
+/* Title spacing */
+h1 {{
+    margin-bottom: 10px;
+}}
+
+/* Sidebar */
 section[data-testid="stSidebar"] {{
     background-color: {sidebar};
 }}
 
+/* Sticky filter bar */
 .top-bar {{
+    position: sticky;
+    top: 0;
+    z-index: 999;
     background-color: {card};
     padding: 15px;
     border-radius: 12px;
-    margin-bottom: 15px;
+    margin-bottom: 10px;
 }}
 
+/* Filter chips */
+.chip {{
+    display: inline-block;
+    padding: 6px 12px;
+    margin: 4px;
+    border-radius: 20px;
+    background-color: {card};
+    border: 1px solid #ccc;
+    font-size: 13px;
+}}
+
+/* KPI cards */
 .kpi-card {{
     background-color: {card};
     padding: 20px;
@@ -72,6 +99,7 @@ section[data-testid="stSidebar"] {{
     opacity: 0.7;
 }}
 
+/* Dataframe */
 .stDataFrame {{
     background-color: {card} !important;
 }}
@@ -80,14 +108,20 @@ section[data-testid="stSidebar"] {{
     color: {text} !important;
 }}
 
+/* Selectboxes */
 div[data-baseweb="select"] {{
     background-color: {card} !important;
     border-radius: 8px;
 }}
 
 div[data-baseweb="select"] * {{
-    color: {text} !important;
+    color: {filter_text} !important;
 }}
+
+div[data-baseweb="select"] span {{
+    font-weight: 600;
+}}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -98,7 +132,7 @@ st.title("🔥 Canada Active Fires Dashboard")
 st.markdown("<br>", unsafe_allow_html=True)
 
 # =========================
-# SNOWFLAKE CONNECTION
+# SNOWFLAKE
 # =========================
 def get_snowflake_session():
     return Session.builder.configs(
@@ -132,6 +166,23 @@ with c3:
     selected_stage = st.selectbox("Stage of Control", stages)
 
 st.markdown('</div>', unsafe_allow_html=True)
+
+# =========================
+# ACTIVE FILTER CHIPS
+# =========================
+chips_html = ""
+
+if selected_province != "All":
+    chips_html += f'<span class="chip">Province: {selected_province}</span>'
+
+if selected_response != "All":
+    chips_html += f'<span class="chip">Response: {selected_response}</span>'
+
+if selected_stage != "All":
+    chips_html += f'<span class="chip">Stage: {selected_stage}</span>'
+
+if chips_html:
+    st.markdown(chips_html, unsafe_allow_html=True)
 
 # =========================
 # FILTER DATA
@@ -187,16 +238,14 @@ filtered["color"] = filtered["STAGE_OF_CONTROL_DESCRIPTION"].map(
 )
 
 # =========================
-# RADIUS SCALING (LOG + SLIDER)
+# RADIUS SCALING
 # =========================
 min_radius = 2000 * size_factor
 max_radius = 20000 * size_factor
 
 if total_fires > 0:
     log_hectares = np.log1p(filtered["HECTARES"].fillna(1))
-
-    h_min = log_hectares.min()
-    h_max = log_hectares.max()
+    h_min, h_max = log_hectares.min(), log_hectares.max()
     h_range = h_max - h_min if h_max > h_min else 1
 
     filtered["radius"] = log_hectares.apply(
