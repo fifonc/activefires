@@ -105,8 +105,8 @@ COLOR_MAP = {
     "Unstaffed and Uncontained": [239, 68, 68, 200],
     "Unstaffed and Contained": [251, 191, 36, 200],
 }
-DEFAULT_COLOR = [156, 163, 175, 200]
-# DEFAULT_COLOR = [211, 218, 231, 200]
+# DEFAULT_COLOR = [156, 163, 175, 200]
+DEFAULT_COLOR = [240, 242, 246]
 
 filtered = filtered.copy()
 filtered["color"] = filtered["STAGE_OF_CONTROL_DESCRIPTION"].map(
@@ -195,7 +195,6 @@ st.dataframe(
         "RESPONSE_TYPE_DESCRIPTION",
         "STAGE_OF_CONTROL_DESCRIPTION",
         "STARTDATE",
-        "HECTARES",
         "DAYS_ACTIVE"
 
     ]],
