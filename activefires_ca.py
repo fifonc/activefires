@@ -1,8 +1,8 @@
 import streamlit as st
 import pydeck as pdk
 import pandas as pd
+import numpy as np
 from snowflake.snowpark import Session
-import numpy
 
 # =========================
 # PAGE CONFIG
@@ -13,13 +13,16 @@ st.set_page_config(
 )
 
 # =========================
-# THEME TOGGLE
+# SIDEBAR CONTROLS
 # =========================
 st.sidebar.header("🎨 Appearance")
 dark_mode = st.sidebar.toggle("Dark Mode", value=True)
 
+st.sidebar.header("🗺️ Map Controls")
+size_factor = st.sidebar.slider("Bubble Size", 0.5, 3.0, 1.2, 0.1)
+
 # =========================
-# GLOBAL STYLES
+# THEME COLORS
 # =========================
 if dark_mode:
     bg = "#0E1117"
@@ -32,26 +35,19 @@ else:
     sidebar = "#F3F4F6"
     text = "#111827"
 
+# =========================
+# GLOBAL CSS
+# =========================
 st.markdown(f"""
 <style>
+.stApp {{ background-color: {bg}; color: {text}; }}
 
-/* App */
-.stApp {{
-    background-color: {bg};
-    color: {text};
-}}
+h1 {{ margin-bottom: 10px; }}
 
-/* Title spacing */
-h1 {{
-    margin-bottom: 10px;
-}}
-
-/* Sidebar */
 section[data-testid="stSidebar"] {{
     background-color: {sidebar};
 }}
 
-/* Top filter bar */
 .top-bar {{
     background-color: {card};
     padding: 15px;
@@ -59,7 +55,6 @@ section[data-testid="stSidebar"] {{
     margin-bottom: 15px;
 }}
 
-/* KPI cards */
 .kpi-card {{
     background-color: {card};
     padding: 20px;
@@ -77,7 +72,6 @@ section[data-testid="stSidebar"] {{
     opacity: 0.7;
 }}
 
-/* Dataframe */
 .stDataFrame {{
     background-color: {card} !important;
 }}
@@ -86,7 +80,6 @@ section[data-testid="stSidebar"] {{
     color: {text} !important;
 }}
 
-/* Selectboxes */
 div[data-baseweb="select"] {{
     background-color: {card} !important;
     border-radius: 8px;
@@ -95,7 +88,6 @@ div[data-baseweb="select"] {{
 div[data-baseweb="select"] * {{
     color: {text} !important;
 }}
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -121,7 +113,7 @@ def load_data():
 df = load_data()
 
 # =========================
-# TOP FILTER BAR
+# FILTER BAR
 # =========================
 st.markdown('<div class="top-bar">', unsafe_allow_html=True)
 
@@ -156,7 +148,7 @@ if selected_stage != "All":
     filtered = filtered[filtered["STAGE_OF_CONTROL_DESCRIPTION"] == selected_stage]
 
 # =========================
-# KPIs (CUSTOM CARDS)
+# KPIs
 # =========================
 total_fires = len(filtered)
 total_hectares = int(filtered["HECTARES"].sum()) if total_fires else 0
@@ -194,11 +186,15 @@ filtered["color"] = filtered["STAGE_OF_CONTROL_DESCRIPTION"].map(
     lambda x: COLOR_MAP.get(x, DEFAULT_COLOR)
 )
 
-min_radius = 2000
-max_radius = 20000
+# =========================
+# RADIUS SCALING (LOG + SLIDER)
+# =========================
+min_radius = 2000 * size_factor
+max_radius = 20000 * size_factor
 
 if total_fires > 0:
-    log_hectares = np.log1p(filtered["HECTARES"])  # handles skew
+    log_hectares = np.log1p(filtered["HECTARES"].fillna(1))
+
     h_min = log_hectares.min()
     h_max = log_hectares.max()
     h_range = h_max - h_min if h_max > h_min else 1
