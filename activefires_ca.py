@@ -2,6 +2,7 @@ import streamlit as st
 import pydeck as pdk
 import pandas as pd
 from snowflake.snowpark import Session
+import numpy
 
 # =========================
 # PAGE CONFIG
@@ -193,7 +194,20 @@ filtered["color"] = filtered["STAGE_OF_CONTROL_DESCRIPTION"].map(
     lambda x: COLOR_MAP.get(x, DEFAULT_COLOR)
 )
 
-filtered["radius"] = filtered["HECTARES"].fillna(1) * 10
+min_radius = 2000
+max_radius = 20000
+
+if total_fires > 0:
+    log_hectares = np.log1p(filtered["HECTARES"])  # handles skew
+    h_min = log_hectares.min()
+    h_max = log_hectares.max()
+    h_range = h_max - h_min if h_max > h_min else 1
+
+    filtered["radius"] = log_hectares.apply(
+        lambda h: min_radius + (max_radius - min_radius) * ((h - h_min) / h_range)
+    )
+else:
+    filtered["radius"] = min_radius
 
 # =========================
 # MAP
