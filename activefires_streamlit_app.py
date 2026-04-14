@@ -47,7 +47,7 @@ section[data-testid="stSidebar"] {{ background-color: {sidebar}; }}
 st.title("🔥 Canada Active Fires Dashboard")
 
 # =========================
-# SNOWFLAKE
+# DATA
 # =========================
 @st.cache_data
 def load_data():
@@ -63,15 +63,21 @@ def load_data():
 df = load_data()
 
 # =========================
-# FILTERS (WORKING AGAIN)
+# CLEAN DATA (IMPORTANT FIX)
 # =========================
-col1, col2, col3 = st.columns(3)
+df = df.dropna(subset=["LAT", "LON"])
+df["HECTARES"] = df["HECTARES"].fillna(1)
 
-with col1:
+# =========================
+# FILTERS
+# =========================
+c1, c2, c3 = st.columns(3)
+
+with c1:
     prov = st.selectbox("Province", ["All"] + sorted(df["PROVINCE"].dropna().unique()))
-with col2:
+with c2:
     resp = st.selectbox("Response", ["All"] + sorted(df["RESPONSE_TYPE_DESCRIPTION"].dropna().unique()))
-with col3:
+with c3:
     stage = st.selectbox("Stage", ["All"] + sorted(df["STAGE_OF_CONTROL_DESCRIPTION"].dropna().unique()))
 
 filtered = df.copy()
@@ -84,13 +90,65 @@ if stage != "All":
     filtered = filtered[filtered["STAGE_OF_CONTROL_DESCRIPTION"] == stage]
 
 # =========================
-# SESSION STATE
+# SAFE BUBBLE SIZE (FIX)
 # =========================
-if "selected_points" not in st.session_state:
-    st.session_state.selected_points = []
+filtered["size"] = np.clip(
+    np.log1p(filtered["HECTARES"]) * 6 * size_factor,
+    5,   # minimum visible
+    40   # max reasonable
+)
 
 # =========================
-# KPI CARDS (TOP AGAIN)
+# SESSION STATE
+# =========================
+if "selected_idx" not in st.session_state:
+    st.session_state.selected_idx = []
+
+# =========================
+# MAP
+# =========================
+st.subheader("🗺️ Fire Map")
+
+fig = px.scatter_mapbox(
+    filtered,
+    lat="LAT",
+    lon="LON",
+    size="size",
+    color="STAGE_OF_CONTROL_DESCRIPTION",
+    hover_name="FIRENAME",
+    hover_data=["PROVINCE", "HECTARES"],
+    zoom=3,
+    height=500
+)
+
+fig.update_layout(
+    mapbox_style="carto-darkmatter" if dark_mode else "carto-positron",
+    showlegend=False,
+    margin=dict(l=0, r=0, t=0, b=0)
+)
+
+selected = plotly_events(
+    fig,
+    click_event=True,
+    select_event=True
+)
+
+# =========================
+# STORE SELECTION
+# =========================
+if selected:
+    st.session_state.selected_idx = [p["pointIndex"] for p in selected]
+
+# =========================
+# APPLY SELECTION
+# =========================
+final_df = filtered.copy()
+
+if st.session_state.selected_idx:
+    final_df = filtered.iloc[st.session_state.selected_idx]
+
+# =========================
+# KPI CARDS (NOW REACTIVE)
 # =========================
 def kpi(col, label, value):
     col.markdown(f"""
@@ -102,64 +160,18 @@ def kpi(col, label, value):
 
 k1, k2, k3 = st.columns(3)
 
-kpi(k1, "🔥 Fires", len(filtered))
-kpi(k2, "🌲 Total Hectares", int(filtered["HECTARES"].sum()) if len(filtered) else 0)
-kpi(k3, "📊 Avg Size", int(filtered["HECTARES"].mean()) if len(filtered) else 0)
-
-st.markdown("---")
-
-# =========================
-# MAP (LASSO ENABLED)
-# =========================
-if len(filtered) > 0:
-
-    filtered["size"] = np.log1p(filtered["HECTARES"]) * 5 * size_factor
-
-    fig = px.scatter_mapbox(
-        filtered,
-        lat="LAT",
-        lon="LON",
-        size="size",
-        color="STAGE_OF_CONTROL_DESCRIPTION",
-        hover_name="FIRENAME",
-        zoom=3,
-        height=500
-    )
-
-    fig.update_layout(
-        mapbox_style="carto-darkmatter" if dark_mode else "carto-positron",
-        showlegend=False,
-        margin=dict(l=0, r=0, t=0, b=0)
-    )
-
-    selected = plotly_events(
-        fig,
-        click_event=True,
-        select_event=True  # 🔥 THIS ENABLES LASSO
-    )
-
-    # =========================
-    # STORE MULTI-SELECTION
-    # =========================
-    if selected:
-        indices = [p["pointIndex"] for p in selected]
-        st.session_state.selected_points = indices
-
-# =========================
-# APPLY SELECTION FILTER
-# =========================
-final_df = filtered.copy()
-
-if st.session_state.selected_points:
-    final_df = filtered.iloc[st.session_state.selected_points]
+kpi(k1, "🔥 Fires", len(final_df))
+kpi(k2, "🌲 Total Hectares", int(final_df["HECTARES"].sum()) if len(final_df) else 0)
+kpi(k3, "📊 Avg Size", int(final_df["HECTARES"].mean()) if len(final_df) else 0)
 
 # =========================
 # TABLE
 # =========================
+st.subheader("📋 Fire Details")
 st.dataframe(final_df, use_container_width=True)
 
 # =========================
 # RESET
 # =========================
 if st.button("🔄 Reset Selection"):
-    st.session_state.selected_points = []
+    st.session_state.selected_idx = []
