@@ -1,23 +1,7 @@
-# =========================
-# SNOWFLAKE SESSION
-# =========================
-# def get_session():
-#     return Session.builder.configs(st.secrets["snowflake"]).create()
-
 import streamlit as st
 import pydeck as pdk
 import pandas as pd
-import numpy as np
-from snowflake.snowpark.context import get_active_session
-
-# =========================
-# SNOWFLAKE
-# =========================
-@st.cache_data
-def get_session():
-    return Session.builder.configs(st.secrets["snowflake"]).create()
-
-df = load_data()
+from snowflake.snowpark import Session
 
 # =========================
 # PAGE CONFIG
@@ -28,33 +12,25 @@ st.set_page_config(
 )
 
 # =========================
-# SIDEBAR CONTROLS
+# THEME TOGGLE
 # =========================
 st.sidebar.header("🎨 Appearance")
 dark_mode = st.sidebar.toggle("Dark Mode", value=True)
 
-st.sidebar.header("🗺️ Map Controls")
-size_factor = st.sidebar.slider("Bubble Size", 0.5, 3.0, 1.8, 0.1)
-
 # =========================
-# THEME COLORS
+# GLOBAL STYLES
 # =========================
 if dark_mode:
     bg = "#0E1117"
     card = "#1F2937"
-    sidebar = "#F59E0B"
-    text = "#F59E0B"
-    filter_text = "#F59E0B"
+    sidebar = "#111827"
+    text = "white"
 else:
     bg = "#F9FAFB"
     card = "#FFFFFF"
     sidebar = "#F3F4F6"
     text = "#111827"
-    filter_text = "black"
 
-# =========================
-# GLOBAL CSS
-# =========================
 st.markdown(f"""
 <style>
 
@@ -74,26 +50,12 @@ section[data-testid="stSidebar"] {{
     background-color: {sidebar};
 }}
 
-/* Sticky filter bar */
+/* Top filter bar */
 .top-bar {{
-    position: sticky;
-    top: 0;
-    z-index: 999;
     background-color: {card};
     padding: 15px;
     border-radius: 12px;
-    margin-bottom: 10px;
-}}
-
-/* Filter chips */
-.chip {{
-    display: inline-block;
-    padding: 6px 12px;
-    margin: 4px;
-    border-radius: 20px;
-    background-color: {card};
-    border: 1px solid #ccc;
-    font-size: 13px;
+    margin-bottom: 15px;
 }}
 
 /* KPI cards */
@@ -130,11 +92,7 @@ div[data-baseweb="select"] {{
 }}
 
 div[data-baseweb="select"] * {{
-    color: {filter_text} !important;
-}}
-
-div[data-baseweb="select"] span {{
-    font-weight: 600;
+    color: {text} !important;
 }}
 
 </style>
@@ -144,10 +102,25 @@ div[data-baseweb="select"] span {{
 # TITLE
 # =========================
 st.title("🔥 Canada Active Fires Dashboard")
-# st.markdown("<br>", unsafe_allow_html=True)
+st.markdown("<br>", unsafe_allow_html=True)
 
 # =========================
-# FILTER BAR
+# SNOWFLAKE CONNECTION
+# =========================
+def get_snowflake_session():
+    return Session.builder.configs(
+        st.secrets["snowflake"]
+    ).create()
+
+@st.cache_data
+def load_data():
+    session = get_snowflake_session()
+    return session.sql("SELECT * FROM EVA.GIS.VW_ACTIVEFIRES").to_pandas()
+
+df = load_data()
+
+# =========================
+# TOP FILTER BAR
 # =========================
 st.markdown('<div class="top-bar">', unsafe_allow_html=True)
 
@@ -168,23 +141,6 @@ with c3:
 st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================
-# ACTIVE FILTER CHIPS
-# =========================
-chips_html = ""
-
-if selected_province != "All":
-    chips_html += f'<span class="chip">Province: {selected_province}</span>'
-
-if selected_response != "All":
-    chips_html += f'<span class="chip">Response: {selected_response}</span>'
-
-if selected_stage != "All":
-    chips_html += f'<span class="chip">Stage: {selected_stage}</span>'
-
-if chips_html:
-    st.markdown(chips_html, unsafe_allow_html=True)
-
-# =========================
 # FILTER DATA
 # =========================
 filtered = df.copy()
@@ -199,7 +155,7 @@ if selected_stage != "All":
     filtered = filtered[filtered["STAGE_OF_CONTROL_DESCRIPTION"] == selected_stage]
 
 # =========================
-# KPIs
+# KPIs (CUSTOM CARDS)
 # =========================
 total_fires = len(filtered)
 total_hectares = int(filtered["HECTARES"].sum()) if total_fires else 0
@@ -237,22 +193,7 @@ filtered["color"] = filtered["STAGE_OF_CONTROL_DESCRIPTION"].map(
     lambda x: COLOR_MAP.get(x, DEFAULT_COLOR)
 )
 
-# =========================
-# RADIUS SCALING
-# =========================
-min_radius = 2000 * size_factor
-max_radius = 20000 * size_factor
-
-if total_fires > 0:
-    log_hectares = np.log1p(filtered["HECTARES"].fillna(1))
-    h_min, h_max = log_hectares.min(), log_hectares.max()
-    h_range = h_max - h_min if h_max > h_min else 1
-
-    filtered["radius"] = log_hectares.apply(
-        lambda h: min_radius + (max_radius - min_radius) * ((h - h_min) / h_range)
-    )
-else:
-    filtered["radius"] = min_radius
+filtered["radius"] = filtered["HECTARES"].fillna(1) * 10
 
 # =========================
 # MAP
