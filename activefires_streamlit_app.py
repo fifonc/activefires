@@ -5,7 +5,6 @@ import plotly.express as px
 from snowflake.snowpark import Session
 from streamlit_plotly_events import plotly_events
 
-
 # =========================
 # CONFIG
 # =========================
@@ -139,9 +138,9 @@ if len(filtered) > 0:
         select_event=True  # 🔥 THIS ENABLES LASSO
     )
 
-# =========================
-# STORE MULTI-SELECTION
-# =========================
+    # =========================
+    # STORE MULTI-SELECTION
+    # =========================
     if selected:
         indices = [p["pointIndex"] for p in selected]
         st.session_state.selected_points = indices
