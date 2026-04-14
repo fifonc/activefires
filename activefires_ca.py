@@ -155,8 +155,9 @@ if selected_stage != "All":
 total_fires = len(filtered)
 total_hectares = int(filtered["HECTARES"].sum()) if total_fires else 0
 avg_size = int(filtered["HECTARES"].mean()) if total_fires else 0
+largest_fire = final_df.loc[final_df["HECTARES"].idxmax()]["FIRENAME"] if total_fires else "-"
 
-k1, k2, k3 = st.columns(3)
+k1, k2, k3, k4 = st.columns(4)
 
 def kpi(col, label, value, color):
     col.markdown(f"""
@@ -169,6 +170,7 @@ def kpi(col, label, value, color):
 kpi(k1, "🔥 Active Fires", total_fires, "#EF4444")
 kpi(k2, "🌲 Total Hectares", f"{total_hectares:,}", "#F59E0B")
 kpi(k3, "📊 Avg Fire Size", f"{avg_size:,}", "#10B981")
+kpi(k4, "🏆 Largest Fire", largest_fire)
 
 st.markdown("---")
 
