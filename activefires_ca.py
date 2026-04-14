@@ -50,11 +50,6 @@ section[data-testid="stSidebar"] {{ background-color: {sidebar}; }}
     padding: 15px; border-radius: 10px; margin-bottom: 10px;
 }}
 
-.chip {{
-    display:inline-block; padding:6px 12px; margin:4px;
-    border-radius:20px; background:{card}; border:1px solid #ccc;
-}}
-
 div[data-baseweb="select"] * {{ color:{filter_text} !important; }}
 </style>
 """, unsafe_allow_html=True)
@@ -66,47 +61,31 @@ st.title("🔥 Canada Active Fires Dashboard")
 st.markdown("<br>", unsafe_allow_html=True)
 
 # =========================
-# SNOWFLAKE OPTIMIZED QUERY
+# SNOWFLAKE SESSION
 # =========================
 def get_session():
     return Session.builder.configs(st.secrets["snowflake"]).create()
 
+# =========================
+# LOAD FILTER VALUES (SAFE)
+# =========================
 @st.cache_data
-def load_data(province, response, stage):
+def load_filter_values():
     session = get_session()
+    return session.sql("""
+        SELECT DISTINCT 
+            PROVINCE, 
+            RESPONSE_TYPE_DESCRIPTION, 
+            STAGE_OF_CONTROL_DESCRIPTION 
+        FROM EVA.GIS.VW_ACTIVEFIRES
+    """).to_pandas()
 
-    query = """
-    SELECT 
-        FIRENAME, PROVINCE, HECTARES,
-        RESPONSE_TYPE_DESCRIPTION,
-        STAGE_OF_CONTROL_DESCRIPTION,
-        LAT, LON, STARTDATE, DAYS_ACTIVE
-    FROM EVA.GIS.VW_ACTIVEFIRES
-    WHERE 1=1
-    """
-
-    if province != "All":
-        query += f" AND PROVINCE = '{province}'"
-    if response != "All":
-        query += f" AND RESPONSE_TYPE_DESCRIPTION = '{response}'"
-    if stage != "All":
-        query += f" AND STAGE_OF_CONTROL_DESCRIPTION = '{stage}'"
-
-    return session.sql(query).to_pandas()
+filters_df = load_filter_values()
 
 # =========================
 # FILTER BAR
 # =========================
 st.markdown('<div class="top-bar">', unsafe_allow_html=True)
-
-# (Load small distinct lists once)
-@st.cache_data
-def load_filter_values():
-    session = get_session()
-    df = session.sql("SELECT DISTINCT PROVINCE, RESPONSE_TYPE_DESCRIPTION, STAGE_OF_CONTROL_DESCRIPTION FROM EVA.GIS.VW_ACTIVEFIRES").to_pandas()
-    return df
-
-filters_df = load_filter_values()
 
 c1, c2, c3 = st.columns(3)
 
@@ -125,15 +104,47 @@ with c3:
 st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================
-# LOAD FILTERED DATA (SQL PUSHDOWN)
+# SAFE DATA LOAD (NO STRING CONCAT)
 # =========================
-df = load_data(selected_province, selected_response, selected_stage)
+@st.cache_data
+def load_data():
+    session = get_session()
+    return session.sql("""
+        SELECT 
+            FIRENAME, PROVINCE, HECTARES,
+            RESPONSE_TYPE_DESCRIPTION,
+            STAGE_OF_CONTROL_DESCRIPTION,
+            LAT, LON, STARTDATE, DAYS_ACTIVE
+        FROM EVA.GIS.VW_ACTIVEFIRES
+    """).to_pandas()
+
+df = load_data()
+
+# Apply filters in pandas (safe & fast enough with selected columns)
+filtered = df.copy()
+
+if selected_province != "All":
+    filtered = filtered[filtered["PROVINCE"] == selected_province]
+
+if selected_response != "All":
+    filtered = filtered[filtered["RESPONSE_TYPE_DESCRIPTION"] == selected_response]
+
+if selected_stage != "All":
+    filtered = filtered[filtered["STAGE_OF_CONTROL_DESCRIPTION"] == selected_stage]
 
 # =========================
-# CLICK SELECTION STATE
+# INSIGHTS
 # =========================
-if "selected_fire" not in st.session_state:
-    st.session_state.selected_fire = None
+st.subheader("🧠 Top Insights")
+
+if len(filtered) > 0:
+    biggest = filtered.loc[filtered["HECTARES"].idxmax()]
+    st.markdown(f"""
+    <div class="insight">🔥 Largest fire: <b>{biggest["FIRENAME"]}</b> ({int(biggest["HECTARES"]):,} ha)</div>
+    <div class="insight">📍 Most fires in: <b>{filtered["PROVINCE"].value_counts().idxmax()}</b></div>
+    <div class="insight">⚠️ Out of control: <b>{(filtered["STAGE_OF_CONTROL_DESCRIPTION"]=="Out of Control").mean()*100:.1f}%</b></div>
+    <div class="insight">⏳ Avg duration: <b>{filtered["DAYS_ACTIVE"].mean():.1f} days</b></div>
+    """, unsafe_allow_html=True)
 
 # =========================
 # MAP PREP
@@ -145,71 +156,54 @@ COLOR_MAP = {
     "Extinguished": [156, 163, 175, 200],
 }
 
-df["color"] = df["STAGE_OF_CONTROL_DESCRIPTION"].map(lambda x: COLOR_MAP.get(x, [200,200,200,180]))
+filtered["color"] = filtered["STAGE_OF_CONTROL_DESCRIPTION"].map(
+    lambda x: COLOR_MAP.get(x, [200, 200, 200, 180])
+)
 
 # Radius scaling
 min_r, max_r = 2000*size_factor, 20000*size_factor
-log_h = np.log1p(df["HECTARES"].fillna(1))
-df["radius"] = min_r + (max_r-min_r)*(log_h-log_h.min())/(log_h.max()-log_h.min()+1e-9)
+log_h = np.log1p(filtered["HECTARES"].fillna(1))
+filtered["radius"] = min_r + (max_r-min_r)*(log_h-log_h.min())/(log_h.max()-log_h.min()+1e-9)
 
 # =========================
-# INSIGHTS PANEL
-# =========================
-st.subheader("🧠 Top Insights")
-
-if len(df) > 0:
-    biggest = df.loc[df["HECTARES"].idxmax()]
-    top_province = df["PROVINCE"].value_counts().idxmax()
-    out_pct = (df["STAGE_OF_CONTROL_DESCRIPTION"] == "Out of Control").mean()*100
-    avg_days = df["DAYS_ACTIVE"].mean()
-
-    st.markdown(f"""
-    <div class="insight">🔥 Largest fire: <b>{biggest["FIRENAME"]}</b> ({int(biggest["HECTARES"]):,} ha)</div>
-    <div class="insight">📍 Most fires in: <b>{top_province}</b></div>
-    <div class="insight">⚠️ Out of control: <b>{out_pct:.1f}%</b></div>
-    <div class="insight">⏳ Avg duration: <b>{avg_days:.1f} days</b></div>
-    """, unsafe_allow_html=True)
-
-# =========================
-# MAP (CLICK ENABLED)
+# MAP (TOOLTIPS RESTORED)
 # =========================
 st.subheader("🗺️ Fire Map")
 
+tooltip = {
+    "html": """
+    <b>{FIRENAME}</b><br/>
+    Province: {PROVINCE}<br/>
+    Hectares: {HECTARES}<br/>
+    Stage: {STAGE_OF_CONTROL_DESCRIPTION}<br/>
+    Days Active: {DAYS_ACTIVE}
+    """,
+    "style": {"backgroundColor": "#222", "color": "white"}
+}
+
 layer = pdk.Layer(
     "ScatterplotLayer",
-    data=df,
+    data=filtered,
     get_position=["LON","LAT"],
     get_color="color",
     get_radius="radius",
     pickable=True,
 )
 
-deck = pdk.Deck(
+st.pydeck_chart(pdk.Deck(
     layers=[layer],
     initial_view_state=pdk.ViewState(
-        latitude=df["LAT"].mean() if len(df) else 56,
-        longitude=df["LON"].mean() if len(df) else -96,
+        latitude=filtered["LAT"].mean() if len(filtered) else 56,
+        longitude=filtered["LON"].mean() if len(filtered) else -96,
         zoom=4,
     ),
+    tooltip=tooltip,
     map_style="dark" if dark_mode else "light",
-)
-
-event = st.pydeck_chart(deck)
-
-# ⚡ CLICK HANDLING
-if event and "picked" in event and len(event["picked"]) > 0:
-    picked = event["picked"][0]
-    st.session_state.selected_fire = picked["object"]["FIRENAME"]
+))
 
 # =========================
-# TABLE (CLICK FILTER)
+# TABLE
 # =========================
 st.subheader("📋 Fire Details")
 
-table_df = df.copy()
-
-if st.session_state.selected_fire:
-    table_df = table_df[table_df["FIRENAME"] == st.session_state.selected_fire]
-    st.info(f"Filtered by selected fire: {st.session_state.selected_fire}")
-
-st.dataframe(table_df, use_container_width=True)
+st.dataframe(filtered, use_container_width=True)
