@@ -155,7 +155,7 @@ if selected_stage != "All":
 total_fires = len(filtered)
 total_hectares = int(filtered["HECTARES"].sum()) if total_fires else 0
 avg_size = int(filtered["HECTARES"].mean()) if total_fires else 0
-largest_fire = final_df.loc[final_df["HECTARES"].idxmax()]["FIRENAME"] if total_fires else "-"
+largest_fire = df.loc[df["HECTARES"].idxmax()]["FIRENAME"] if total_fires else "-"
 
 k1, k2, k3, k4 = st.columns(4)
 
