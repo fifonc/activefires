@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 from snowflake.snowpark import Session
+from streamlit_plotly_events import plotly_events
 
 # =========================
 # PAGE CONFIG
@@ -43,9 +44,12 @@ st.markdown(f"""
 section[data-testid="stSidebar"] {{ background-color: {sidebar}; }}
 
 .top-bar {{
-    position: sticky; top: 0; z-index: 999;
+    position: sticky;
+    top: 0;
+    z-index: 999;
     background-color: {card};
-    padding: 15px; border-radius: 12px;
+    padding: 15px;
+    border-radius: 12px;
 }}
 
 .kpi-card {{
@@ -119,7 +123,7 @@ with c3:
 st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================
-# FILTER DATA
+# BASE FILTER
 # =========================
 filtered = df.copy()
 
@@ -133,14 +137,65 @@ if selected_stage != "All":
     filtered = filtered[filtered["STAGE_OF_CONTROL_DESCRIPTION"] == selected_stage]
 
 # =========================
-# KPI CARDS (INSIGHTS)
+# SESSION STATE (CLICK)
 # =========================
-total_fires = len(filtered)
-total_hectares = int(filtered["HECTARES"].sum()) if total_fires else 0
-avg_size = int(filtered["HECTARES"].mean()) if total_fires else 0
+if "selected_fire" not in st.session_state:
+    st.session_state.selected_fire = None
 
-largest_fire = filtered.loc[filtered["HECTARES"].idxmax()]["FIRENAME"] if total_fires else "-"
-top_province = filtered["PROVINCE"].value_counts().idxmax() if total_fires else "-"
+# =========================
+# MAP
+# =========================
+st.subheader("🗺️ Fire Map")
+
+if len(filtered) > 0:
+
+    filtered["size"] = np.log1p(filtered["HECTARES"]) * 5 * size_factor
+
+    fig = px.scatter_mapbox(
+        filtered,
+        lat="LAT",
+        lon="LON",
+        size="size",
+        color="STAGE_OF_CONTROL_DESCRIPTION",
+        hover_name="FIRENAME",
+        hover_data=["PROVINCE", "HECTARES", "DAYS_ACTIVE"],
+        zoom=3,
+        height=500
+    )
+
+    fig.update_layout(
+        mapbox_style="carto-darkmatter" if dark_mode else "carto-positron",
+        margin={"r":0,"t":0,"l":0,"b":0},
+        showlegend=False  # ✅ REMOVED LEGEND
+    )
+
+    selected_points = plotly_events(fig, click_event=True)
+
+    # =========================
+    # CLICK HANDLER
+    # =========================
+    if selected_points:
+        point_index = selected_points[0]["pointIndex"]
+        st.session_state.selected_fire = filtered.iloc[point_index]["FIRENAME"]
+
+# =========================
+# APPLY CLICK FILTER
+# =========================
+final_df = filtered.copy()
+
+if st.session_state.selected_fire:
+    final_df = final_df[
+        final_df["FIRENAME"] == st.session_state.selected_fire
+    ]
+
+# =========================
+# KPI CARDS (DYNAMIC)
+# =========================
+total_fires = len(final_df)
+total_hectares = int(final_df["HECTARES"].sum()) if total_fires else 0
+avg_size = int(final_df["HECTARES"].mean()) if total_fires else 0
+
+largest_fire = final_df.loc[final_df["HECTARES"].idxmax()]["FIRENAME"] if total_fires else "-"
 
 k1, k2, k3, k4 = st.columns(4)
 
@@ -160,58 +215,14 @@ kpi(k4, "🏆 Largest Fire", largest_fire)
 st.markdown("---")
 
 # =========================
-# MAP (PLOTLY CLICKABLE)
-# =========================
-st.subheader("🗺️ Fire Map")
-
-if total_fires > 0:
-    filtered["size"] = np.log1p(filtered["HECTARES"]) * 5 * size_factor
-
-    fig = px.scatter_mapbox(
-        filtered,
-        lat="LAT",
-        lon="LON",
-        size="size",
-        color="STAGE_OF_CONTROL_DESCRIPTION",
-        hover_name="FIRENAME",
-        hover_data=["PROVINCE", "HECTARES", "DAYS_ACTIVE"],
-        zoom=3,
-        height=500
-    )
-
-    fig.update_layout(
-        mapbox_style="carto-darkmatter" if dark_mode else "carto-positron",
-        margin={"r":0,"t":0,"l":0,"b":0}
-    )
-
-    selected = st.plotly_chart(fig, use_container_width=True)
-
-# =========================
-# CLICK FILTER STATE
-# =========================
-if "selected_fire" not in st.session_state:
-    st.session_state.selected_fire = None
-
-# NOTE: Streamlit limitation → workaround with selectbox
-selected_fire = st.selectbox(
-    "🔍 Select fire (click alternative)",
-    ["None"] + filtered["FIRENAME"].dropna().unique().tolist()
-)
-
-if selected_fire != "None":
-    st.session_state.selected_fire = selected_fire
-
-# =========================
-# TABLE
+# TABLE (DYNAMIC)
 # =========================
 st.subheader("📋 Fire Details")
 
-table_df = filtered.copy()
+st.dataframe(final_df, use_container_width=True)
 
-if st.session_state.selected_fire:
-    table_df = table_df[
-        table_df["FIRENAME"] == st.session_state.selected_fire
-    ]
-    st.info(f"Filtered: {st.session_state.selected_fire}")
-
-st.dataframe(table_df, use_container_width=True)
+# =========================
+# RESET BUTTON
+# =========================
+if st.button("🔄 Reset Selection"):
+    st.session_state.selected_fire = None
