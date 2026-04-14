@@ -1,148 +1,310 @@
 import streamlit as st
+import pydeck as pdk
 import pandas as pd
 import numpy as np
-import plotly.express as px
 from snowflake.snowpark import Session
-from streamlit_plotly_events import plotly_events
 
 # =========================
-# CONFIG
+# PAGE CONFIG
 # =========================
-st.set_page_config(layout="wide")
+st.set_page_config(
+    page_title="Canada Active Fires Dashboard",
+    layout="wide"
+)
 
-dark_mode = st.sidebar.toggle("Dark Mode", True)
+# =========================
+# SIDEBAR CONTROLS
+# =========================
+st.sidebar.header("🎨 Appearance")
+dark_mode = st.sidebar.toggle("Dark Mode", value=True)
+
+st.sidebar.header("🗺️ Map Controls")
 size_factor = st.sidebar.slider("Bubble Size", 0.5, 3.0, 1.2, 0.1)
 
 # =========================
-# SNOWFLAKE SESSION
+# THEME COLORS
 # =========================
-def get_session():
-    return Session.builder.configs(st.secrets["snowflake"]).create()
+if dark_mode:
+    bg = "#0E1117"
+    card = "#1F2937"
+    sidebar = "#111827"
+    text = "white"
+    filter_text = "white"
+else:
+    bg = "#F9FAFB"
+    card = "#FFFFFF"
+    sidebar = "#F3F4F6"
+    text = "#111827"
+    filter_text = "black"
 
 # =========================
-# LOAD FILTER VALUES (FAST)
+# GLOBAL CSS
 # =========================
+st.markdown(f"""
+<style>
+
+/* App */
+.stApp {{
+    background-color: {bg};
+    color: {text};
+}}
+
+/* Title spacing */
+h1 {{
+    margin-bottom: 10px;
+}}
+
+/* Sidebar */
+section[data-testid="stSidebar"] {{
+    background-color: {sidebar};
+}}
+
+/* Sticky filter bar */
+.top-bar {{
+    position: sticky;
+    top: 0;
+    z-index: 999;
+    background-color: {card};
+    padding: 15px;
+    border-radius: 12px;
+    margin-bottom: 10px;
+}}
+
+/* Filter chips */
+.chip {{
+    display: inline-block;
+    padding: 6px 12px;
+    margin: 4px;
+    border-radius: 20px;
+    background-color: {card};
+    border: 1px solid #ccc;
+    font-size: 13px;
+}}
+
+/* KPI cards */
+.kpi-card {{
+    background-color: {card};
+    padding: 20px;
+    border-radius: 12px;
+    text-align: center;
+}}
+
+.kpi-value {{
+    font-size: 28px;
+    font-weight: bold;
+}}
+
+.kpi-label {{
+    font-size: 14px;
+    opacity: 0.7;
+}}
+
+/* Dataframe */
+.stDataFrame {{
+    background-color: {card} !important;
+}}
+
+.stDataFrame div {{
+    color: {text} !important;
+}}
+
+/* Selectboxes */
+div[data-baseweb="select"] {{
+    background-color: {card} !important;
+    border-radius: 8px;
+}}
+
+div[data-baseweb="select"] * {{
+    color: {filter_text} !important;
+}}
+
+div[data-baseweb="select"] span {{
+    font-weight: 600;
+}}
+
+</style>
+""", unsafe_allow_html=True)
+
+# =========================
+# TITLE
+# =========================
+st.title("🔥 Canada Active Fires Dashboard")
+st.markdown("<br>", unsafe_allow_html=True)
+
+# =========================
+# SNOWFLAKE
+# =========================
+def get_snowflake_session():
+    return Session.builder.configs(
+        st.secrets["snowflake"]
+    ).create()
+
 @st.cache_data
-def load_filters():
-    session = get_session()
-    return session.sql("""
-        SELECT DISTINCT 
-            PROVINCE,
-            RESPONSE_TYPE_DESCRIPTION,
-            STAGE_OF_CONTROL_DESCRIPTION
-        FROM EVA.GIS.VW_ACTIVEFIRES
-    """).to_pandas()
+def load_data():
+    session = get_snowflake_session()
+    return session.sql("SELECT * FROM EVA.GIS.VW_ACTIVEFIRES").to_pandas()
 
-filters_df = load_filters()
+df = load_data()
 
 # =========================
-# FILTER UI
+# FILTER BAR
 # =========================
+st.markdown('<div class="top-bar">', unsafe_allow_html=True)
+
 c1, c2, c3 = st.columns(3)
 
 with c1:
-    prov = st.selectbox("Province", ["All"] + sorted(filters_df["PROVINCE"].dropna().unique()))
+    provinces = ["All"] + sorted(df["PROVINCE"].dropna().unique())
+    selected_province = st.selectbox("Province", provinces)
 
 with c2:
-    resp = st.selectbox("Response", ["All"] + sorted(filters_df["RESPONSE_TYPE_DESCRIPTION"].dropna().unique()))
+    responses = ["All"] + sorted(df["RESPONSE_TYPE_DESCRIPTION"].dropna().unique())
+    selected_response = st.selectbox("Response Type", responses)
 
 with c3:
-    stage = st.selectbox("Stage", ["All"] + sorted(filters_df["STAGE_OF_CONTROL_DESCRIPTION"].dropna().unique()))
+    stages = ["All"] + sorted(df["STAGE_OF_CONTROL_DESCRIPTION"].dropna().unique())
+    selected_stage = st.selectbox("Stage of Control", stages)
+
+st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================
-# LOAD FILTERED DATA (SQL PUSH)
+# ACTIVE FILTER CHIPS
 # =========================
-@st.cache_data
-def load_data(prov, resp, stage):
-    session = get_session()
+chips_html = ""
 
-    query = """
-    SELECT FIRENAME, PROVINCE, HECTARES,
-           RESPONSE_TYPE_DESCRIPTION,
-           STAGE_OF_CONTROL_DESCRIPTION,
-           LAT, LON
-    FROM EVA.GIS.VW_ACTIVEFIRES
-    WHERE LAT IS NOT NULL AND LON IS NOT NULL
-    """
+if selected_province != "All":
+    chips_html += f'<span class="chip">Province: {selected_province}</span>'
 
-    if prov != "All":
-        query += f" AND PROVINCE = '{prov}'"
-    if resp != "All":
-        query += f" AND RESPONSE_TYPE_DESCRIPTION = '{resp}'"
-    if stage != "All":
-        query += f" AND STAGE_OF_CONTROL_DESCRIPTION = '{stage}'"
+if selected_response != "All":
+    chips_html += f'<span class="chip">Response: {selected_response}</span>'
 
-    return session.sql(query).to_pandas()
+if selected_stage != "All":
+    chips_html += f'<span class="chip">Stage: {selected_stage}</span>'
 
-df = load_data(prov, resp, stage)
+if chips_html:
+    st.markdown(chips_html, unsafe_allow_html=True)
 
 # =========================
-# SESSION STATE
+# FILTER DATA
 # =========================
-if "selected_idx" not in st.session_state:
-    st.session_state.selected_idx = []
+filtered = df.copy()
+
+if selected_province != "All":
+    filtered = filtered[filtered["PROVINCE"] == selected_province]
+
+if selected_response != "All":
+    filtered = filtered[filtered["RESPONSE_TYPE_DESCRIPTION"] == selected_response]
+
+if selected_stage != "All":
+    filtered = filtered[filtered["STAGE_OF_CONTROL_DESCRIPTION"] == selected_stage]
 
 # =========================
-# APPLY SELECTION
+# KPIs
 # =========================
-final_df = df.copy()
+total_fires = len(filtered)
+total_hectares = int(filtered["HECTARES"].sum()) if total_fires else 0
+avg_size = int(filtered["HECTARES"].mean()) if total_fires else 0
 
-if st.session_state.selected_idx:
-    final_df = df.iloc[st.session_state.selected_idx]
-
-# =========================
-# KPI CARDS
-# =========================
 k1, k2, k3 = st.columns(3)
 
-def kpi(col, label, value):
-    col.metric(label, value)
+def kpi(col, label, value, color):
+    col.markdown(f"""
+    <div class="kpi-card">
+        <div class="kpi-value" style="color:{color}">{value}</div>
+        <div class="kpi-label">{label}</div>
+    </div>
+    """, unsafe_allow_html=True)
 
-kpi(k1, "🔥 Fires", len(final_df))
-kpi(k2, "🌲 Hectares", int(final_df["HECTARES"].sum()) if len(final_df) else 0)
-kpi(k3, "📊 Avg Size", int(final_df["HECTARES"].mean()) if len(final_df) else 0)
+kpi(k1, "🔥 Active Fires", total_fires, "#EF4444")
+kpi(k2, "🌲 Total Hectares", f"{total_hectares:,}", "#F59E0B")
+kpi(k3, "📊 Avg Fire Size", f"{avg_size:,}", "#10B981")
 
 st.markdown("---")
 
 # =========================
-# MAP (FIXED BUBBLES)
+# MAP PREP
+# =========================
+COLOR_MAP = {
+    "Out of Control": [220, 38, 38, 200],
+    "Being Held": [245, 158, 11, 200],
+    "Under Control": [34, 139, 34, 200],
+    "Extinguished": [156, 163, 175, 200],
+}
+
+DEFAULT_COLOR = [200, 200, 200, 180]
+
+filtered["color"] = filtered["STAGE_OF_CONTROL_DESCRIPTION"].map(
+    lambda x: COLOR_MAP.get(x, DEFAULT_COLOR)
+)
+
+# =========================
+# RADIUS SCALING
+# =========================
+min_radius = 2000 * size_factor
+max_radius = 20000 * size_factor
+
+if total_fires > 0:
+    log_hectares = np.log1p(filtered["HECTARES"].fillna(1))
+    h_min, h_max = log_hectares.min(), log_hectares.max()
+    h_range = h_max - h_min if h_max > h_min else 1
+
+    filtered["radius"] = log_hectares.apply(
+        lambda h: min_radius + (max_radius - min_radius) * ((h - h_min) / h_range)
+    )
+else:
+    filtered["radius"] = min_radius
+
+# =========================
+# MAP
 # =========================
 st.subheader("🗺️ Fire Map")
 
-if len(df) > 0:
+view_state = pdk.ViewState(
+    latitude=filtered["LAT"].mean() if total_fires else 56,
+    longitude=filtered["LON"].mean() if total_fires else -96,
+    zoom=4,
+)
 
-    fig = px.scatter_mapbox(
-        df,
-        lat="LAT",
-        lon="LON",
-        size="HECTARES",          # 🔥 SIMPLE + RELIABLE
-        size_max=30 * size_factor,
-        color="STAGE_OF_CONTROL_DESCRIPTION",
-        hover_name="FIRENAME",
-        hover_data=["PROVINCE", "HECTARES"],
-        zoom=3,
-        height=650
-    )
+layer = pdk.Layer(
+    "ScatterplotLayer",
+    data=filtered,
+    get_position=["LON", "LAT"],
+    get_color="color",
+    get_radius="radius",
+    pickable=True,
+)
 
-    fig.update_layout(
-        mapbox_style="carto-darkmatter" if dark_mode else "carto-positron",
-        showlegend=False,
-        margin=dict(l=0, r=0, t=0, b=0)
-    )
+# Legend
+st.markdown(f"""
+<div style="background:{card}; padding:10px; border-radius:10px; margin-bottom:10px">
+<b>Legend:</b>
+<span style="color:#EF4444">● Out of Control</span> |
+<span style="color:#F59E0B">● Being Held</span> |
+<span style="color:#22C55E">● Under Control</span> |
+<span style="color:#9CA3AF">● Extinguished</span>
+</div>
+""", unsafe_allow_html=True)
 
-    selected = plotly_events(fig, click_event=True, select_event=True)
-
-    if selected:
-        st.session_state.selected_idx = [p["pointIndex"] for p in selected]
+st.pydeck_chart(pdk.Deck(
+    layers=[layer],
+    initial_view_state=view_state,
+    map_style="dark" if dark_mode else "light",
+))
 
 # =========================
 # TABLE
 # =========================
 st.subheader("📋 Fire Details")
-st.dataframe(final_df, use_container_width=True)
 
-# =========================
-# RESET
-# =========================
-if st.button("🔄 Reset Selection"):
-    st.session_state.selected_idx = []
+st.dataframe(
+    filtered[[
+        "FIRENAME",
+        "PROVINCE",
+        "HECTARES",
+        "RESPONSE_TYPE_DESCRIPTION",
+        "STAGE_OF_CONTROL_DESCRIPTION",
+        "STARTDATE",
+        "DAYS_ACTIVE"
+    ]],
+    use_container_width=True,
+)
