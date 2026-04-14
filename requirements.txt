@@ -1,5 +1,6 @@
 streamlit
 pandas
 pydeck
+plotly
 snowflake-snowpark-python
 snowflake-connector-python
