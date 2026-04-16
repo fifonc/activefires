@@ -29,27 +29,29 @@ if dark_mode:
     card = "#0E1117"
     sidebar = "#AACE50"
     text = "#F59E0B"
-    filter_text = "#F59E0B"
 else:
     bg = "white"
     card = "#FFFFFF"
     sidebar = "#AACE50"
     text = "#111827"
-    filter_text = "black"
 
 # =========================
 # GLOBAL CSS
 # =========================
 st.markdown(f"""
 <style>
-.stApp {{ background-color: {bg}; color: {text}; }}
+/* App background */
+.stApp {{
+    background-color: {bg};
+    color: {text};
+}}
 
-h1 {{ margin-bottom: 10px; }}
-
+/* Sidebar */
 section[data-testid="stSidebar"] {{
     background-color: {sidebar};
 }}
 
+/* Top filter container */
 .top-bar {{
     background-color: {card};
     padding: 15px;
@@ -57,11 +59,24 @@ section[data-testid="stSidebar"] {{
     margin-bottom: 15px;
 }}
 
-.label {
+/* 🔥 FILTER LABELS (TOP 3 ONLY) */
+div[data-testid="stHorizontalBlock"] label {{
     color: #F59E0B !important;
     font-weight: 600;
-}
+}}
 
+/* Selectbox styling */
+div[data-baseweb="select"] {{
+    background-color: {card} !important;
+    border-radius: 8px;
+}}
+
+/* Selectbox text */
+div[data-baseweb="select"] div {{
+    color: {text} !important;
+}}
+
+/* KPI cards */
 .kpi-card {{
     background-color: {card};
     padding: 20px;
@@ -79,6 +94,7 @@ section[data-testid="stSidebar"] {{
     opacity: 0.7;
 }}
 
+/* Dataframe */
 .stDataFrame {{
     background-color: {card} !important;
 }}
@@ -87,14 +103,6 @@ section[data-testid="stSidebar"] {{
     color: {text} !important;
 }}
 
-div[data-baseweb="select"] {{
-    background-color: {card} !important;
-    border-radius: 8px;
-}}
-
-div[data-baseweb="select"] * {{
-    color: {text} !important;
-}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -185,8 +193,16 @@ kpi(k4, "🏆 Largest Fire", largest_fire, "#60A5FA")
 st.markdown("---")
 
 # =========================
-# MAP PREP
+# MAP
 # =========================
+st.subheader("🗺️ Fire Map")
+
+view_state = pdk.ViewState(
+    latitude=filtered["LAT"].mean() if total_fires else 56,
+    longitude=filtered["LON"].mean() if total_fires else -96,
+    zoom=4,
+)
+
 COLOR_MAP = {
     "Out of Control": [220, 38, 38, 200],
     "Being Held": [245, 158, 11, 200],
@@ -200,15 +216,11 @@ filtered["color"] = filtered["STAGE_OF_CONTROL_DESCRIPTION"].map(
     lambda x: COLOR_MAP.get(x, DEFAULT_COLOR)
 )
 
-# =========================
-# RADIUS SCALING (LOG + SLIDER)
-# =========================
 min_radius = 2000 * size_factor
 max_radius = 20000 * size_factor
 
 if total_fires > 0:
     log_hectares = np.log1p(filtered["HECTARES"].fillna(1))
-
     h_min = log_hectares.min()
     h_max = log_hectares.max()
     h_range = h_max - h_min if h_max > h_min else 1
@@ -219,17 +231,6 @@ if total_fires > 0:
 else:
     filtered["radius"] = min_radius
 
-# =========================
-# MAP
-# =========================
-st.subheader("🗺️ Fire Map")
-
-view_state = pdk.ViewState(
-    latitude=filtered["LAT"].mean() if total_fires else 56,
-    longitude=filtered["LON"].mean() if total_fires else -96,
-    zoom=4,
-)
-
 layer = pdk.Layer(
     "ScatterplotLayer",
     data=filtered,
@@ -239,33 +240,13 @@ layer = pdk.Layer(
     pickable=True,
 )
 
-# Legend
-st.markdown(f"""
-<div style="background:{card}; padding:10px; border-radius:10px; margin-bottom:10px">
-<b>Legend:</b>
-<span style="color:#EF4444">● Out of Control</span> |
-<span style="color:#F59E0B">● Being Held</span> |
-<span style="color:#22C55E">● Under Control</span> |
-<span style="color:#9CA3AF">● Extinguished</span>
-</div>
-""", unsafe_allow_html=True)
-
-tooltip = { 
-    "html": """ 
-    <b>{FIRENAME}</b>
-    <br/> Province: {PROVINCE}
-    <br/> Hectares: {HECTARES}
-    <br/> Response: {RESPONSE_TYPE_DESCRIPTION}
-    <br/> Stage: {STAGE_OF_CONTROL_DESCRIPTION}
-    <br/> Days Active: {DAYS_ACTIVE} 
-    """, 
-    "style": {"backgroundColor": "#222", "color": "white"}, 
-}
-
 st.pydeck_chart(pdk.Deck(
     layers=[layer],
     initial_view_state=view_state,
-    tooltip=tooltip,
+    tooltip={
+        "html": "<b>{FIRENAME}</b><br/>Province: {PROVINCE}<br/>Hectares: {HECTARES}",
+        "style": {"backgroundColor": "#222", "color": "white"},
+    },
     map_style="dark" if dark_mode else "light",
 ))
 
