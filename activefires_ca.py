@@ -62,7 +62,7 @@ section[data-testid="stSidebar"] {{
 /* 🔥 FILTER LABELS (TOP 3 ONLY) */
 div[data-testid="stHorizontalBlock"] label {{
     color: #F59E0B !important;
-    font-weight: 600;
+    font-weight: 900;
 }}
 
 /* Selectbox styling */
@@ -85,12 +85,12 @@ div[data-baseweb="select"] div {{
 }}
 
 .kpi-value {{
-    font-size: 28px;
+    font-size: 30px;
     font-weight: bold;
 }}
 
 .kpi-label {{
-    font-size: 14px;
+    font-size: 20px;
     opacity: 0.7;
 }}
 
