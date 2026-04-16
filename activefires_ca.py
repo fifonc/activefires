@@ -55,6 +55,7 @@ section[data-testid="stSidebar"] {{
 .top-bar {{
     background-color: {card};
     padding: 15px;
+    font-size: 20px;
     border-radius: 12px;
     margin-bottom: 15px;
 }}
@@ -62,7 +63,6 @@ section[data-testid="stSidebar"] {{
 /* 🔥 FILTER LABELS (TOP 3 ONLY) */
 div[data-testid="stHorizontalBlock"] label {{
     color: #F59E0B !important;
-    font-size: 20px;
     font-weight: 900;
 }}
 
