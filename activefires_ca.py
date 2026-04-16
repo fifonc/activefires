@@ -26,7 +26,7 @@ size_factor = st.sidebar.slider("Bubble Size", 0.5, 3.0, 1.2, 0.1)
 # =========================
 if dark_mode:
     bg = "#0E1117"
-    card = "#1F2937"
+    card = "#0E1117"
     sidebar = "#AACE50"
     text = "#F59E0B"
     filter_text = "#F59E0B"
