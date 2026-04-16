@@ -253,7 +253,7 @@ st.pydeck_chart(pdk.Deck(
         <br/> Days Active: {DAYS_ACTIVE} 
         """, 
         "style": {"backgroundColor": "#222", "color": "white"}, 
-    }
+    },
     map_style="dark" if dark_mode else "light",
 ))
 
