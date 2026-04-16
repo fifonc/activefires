@@ -31,7 +31,7 @@ if dark_mode:
     text = "#F59E0B"
     filter_text = "#F59E0B"
 else:
-    bg = "#F9FAFB"
+    bg = "white"
     card = "#FFFFFF"
     sidebar = "#AACE50"
     text = "#111827"
@@ -254,7 +254,7 @@ tooltip = {
     <br/> Stage: {STAGE_OF_CONTROL_DESCRIPTION}
     <br/> Days Active: {DAYS_ACTIVE} 
     """, 
-    "style": {"backgroundColor": "#222", "color": "#f9fafb"}, 
+    "style": {"backgroundColor": "#222", "color": "white"}, 
 }
 
 st.pydeck_chart(pdk.Deck(
