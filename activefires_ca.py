@@ -62,6 +62,7 @@ section[data-testid="stSidebar"] {{
 /* 🔥 FILTER LABELS (TOP 3 ONLY) */
 div[data-testid="stHorizontalBlock"] label {{
     color: #F59E0B !important;
+    font-size: 20px;
     font-weight: 900;
 }}
 
