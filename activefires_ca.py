@@ -55,7 +55,6 @@ section[data-testid="stSidebar"] {{
 .top-bar {{
     background-color: {card};
     padding: 15px;
-    font-size: 20px;
     border-radius: 12px;
     margin-bottom: 15px;
 }}
