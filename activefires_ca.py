@@ -243,16 +243,17 @@ layer = pdk.Layer(
 st.pydeck_chart(pdk.Deck(
     layers=[layer],
     initial_view_state=view_state,
-    tooltip={
-        "html": 
+    tooltip = { 
+        "html": """ 
         <b>{FIRENAME}</b>
         <br/> Province: {PROVINCE}
         <br/> Hectares: {HECTARES}
         <br/> Response: {RESPONSE_TYPE_DESCRIPTION}
         <br/> Stage: {STAGE_OF_CONTROL_DESCRIPTION}
         <br/> Days Active: {DAYS_ACTIVE} 
-    ,"style": {"backgroundColor": "#222", "color": "white"},
-    },
+        """, 
+        "style": {"backgroundColor": "#222", "color": "white"}, 
+    }
     map_style="dark" if dark_mode else "light",
 ))
 
