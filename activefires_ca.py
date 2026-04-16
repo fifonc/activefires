@@ -29,6 +29,7 @@ if dark_mode:
     card = "#0E1117"
     sidebar = "#AACE50"
     text = "#F59E0B"
+    font_color = "#F59E0B"
     filter_text = "#F59E0B"
 else:
     bg = "white"
