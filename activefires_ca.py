@@ -29,7 +29,6 @@ if dark_mode:
     card = "#0E1117"
     sidebar = "#AACE50"
     text = "#F59E0B"
-    color =  "#F59E0B"
     filter_text = "#F59E0B"
 else:
     bg = "white"
@@ -57,6 +56,11 @@ section[data-testid="stSidebar"] {{
     border-radius: 12px;
     margin-bottom: 15px;
 }}
+
+.label {
+    color: #F59E0B !important;
+    font-weight: 600;
+}
 
 .kpi-card {{
     background-color: {card};
