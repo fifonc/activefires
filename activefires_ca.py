@@ -254,7 +254,7 @@ tooltip = {
     <br/> Stage: {STAGE_OF_CONTROL_DESCRIPTION}
     <br/> Days Active: {DAYS_ACTIVE} 
     """, 
-    "style": {"backgroundColor": "#222", "color": "white"}, 
+    "style": {"backgroundColor": "#222", "color": "#f9fafb"}, 
 }
 
 st.pydeck_chart(pdk.Deck(
